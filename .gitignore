@@ -9,3 +9,6 @@ obj/
 *.exe
 *.dll
 *.zip
+
+# Trash
+*.pdn
