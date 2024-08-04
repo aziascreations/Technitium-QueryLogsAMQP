@@ -3,24 +3,26 @@ A simple application for [Technitium DNS](https://github.com/TechnitiumSoftware/
 that logs queries to an AMQP broker using
 [RabbitMQ's client library](https://github.com/rabbitmq/rabbitmq-dotnet-client).
 
-~~The main goal of this app is to allow you to process logs outside Technitium without having to~~
-
-
+<!--
 ## Features
 * Support for AMQP & ~~AMQPS~~
 * ???
+-->
 
 <!--
 ## Summary
 * [Installation](#installation)
 * [Configuration](#configuration)
-* [AMQP Connection](#amqp-connection)
-* [AMQP Messages](#amqp-messages)
-* [Internal Log Queue](#internal-log-queue)
-* [AMQP Client Task](#amqp-client-task)
+  * [AMQP Connection](#amqp-connection)
+  * [AMQP Messages](#amqp-messages)
+  * [Internal Log Queue](#internal-log-queue)
+  * [AMQP Client Task](#amqp-client-task)
 * [Building](#building)
+  * [Cloning Git Submodules](#cloning-git-submodules)
+  * [Building using script](#building-using-scripts)
 * [Licenses](#licenses)
 -->
+
 
 ## Installation
 1. Download the latest `.zip` file from the
@@ -74,8 +76,6 @@ This application can be made to suit a variety of situations and log throughput 
 
 </details>
 
-**⚠ All fields are required and need to be present in the config file.**
-
 
 ### AMQP Connection
 | Field                           | Description                                    |
@@ -117,7 +117,21 @@ This application can be made to suit a variety of situations and log throughput 
 
 
 ## Building
-TODO
+This sections assumes you already have *git* and *dotnet* installed.
+
+### Cloning Git Submodules
+If you're cloning the repository for the first time:<br>
+`git clone --recurse-submodules https://github.com/aziascreations/Technitium-QueryLogsAMQP.git`
+
+If you cloned the repository with the submodules:<br>
+`git submodule update --init`
+
+
+### Building using scripts
+The application can be built by using the [build.cmd](build.cmd) script.
+
+If you don't want to use it or are on Linux, you can simply run the appropriate
+commands present in that script.
 
 
 ## Licenses
