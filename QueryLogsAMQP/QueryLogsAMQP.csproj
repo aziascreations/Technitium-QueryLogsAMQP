@@ -2,8 +2,52 @@
 
     <PropertyGroup>
         <TargetFramework>net8.0</TargetFramework>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <Nullable>enable</Nullable>
+
+        <ImplicitUsings>disable</ImplicitUsings>
+        <Nullable>disable</Nullable>
+
+        <AssemblyVersion>0.0.1</AssemblyVersion>
+        <FileVersion>0.0.1</FileVersion>
+
+        <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+        <OutputType>Library</OutputType>
+
+        <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+        <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+        
     </PropertyGroup>
 
+    <ItemGroup>
+      <!--<PackageReference Include="AMQPNetLite" Version="2.4.11">
+          <IncludeAssets>compile</IncludeAssets>
+          <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+          <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+          <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+          <PackageCopyToOutput>true</PackageCopyToOutput>>
+      </PackageReference>-->
+        <PackageReference Include="AMQPNetLite" Version="2.4.11" IncludeAssets="all"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\TechnitiumLibrary\TechnitiumLibrary.Net\TechnitiumLibrary.Net.csproj" PrivateAssets="all">
+            <DisableTransitiveProjectReferences>true</DisableTransitiveProjectReferences>
+            <Private>false</Private>
+            <ExcludeAssets>all</ExcludeAssets>
+        </ProjectReference>
+        <ProjectReference Include="..\DnsServer\DnsServerCore.ApplicationCommon\DnsServerCore.ApplicationCommon.csproj" PrivateAssets="all">
+            <DisableTransitiveProjectReferences>true</DisableTransitiveProjectReferences>
+            <Private>false</Private>
+            <ExcludeAssets>all</ExcludeAssets>
+        </ProjectReference>
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Update="dnsApp.config">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
+    
+    <ItemDefinitionGroup>
+        <PackageReference ExcludeAssets="runtime" />
+    </ItemDefinitionGroup>
 </Project>

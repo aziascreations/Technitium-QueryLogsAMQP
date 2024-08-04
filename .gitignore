@@ -1,6 +1,7 @@
-﻿# IDEs
+# IDEs
 .vs/
 .idea/
+*.user
 
 # Build Artifacts
 bin/
