@@ -1,0 +1,54 @@
+name: Build Project
+
+on:
+  push:
+    branches:
+      - "master"
+      - "dev-master"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Git
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - name: Install .NET 8.x
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.x
+      
+      - name: Build TechnitiumLibrary.Net
+        working-directory: ./TechnitiumLibrary
+        run: dotnet build ./TechnitiumLibrary.Net -c Release /p:Platform="Any CPU"
+      
+      - name: Build DnsServerCore.ApplicationCommon
+        working-directory: ./DnsServer
+        run: dotnet build ./DnsServerCore.ApplicationCommon /p:Platform="Any CPU"
+      
+      - name: Restore dependencies
+        working-directory: ./QueryLogsAMQP
+        run: dotnet restore
+      
+      - name: Build QueryLogsAMQP
+        working-directory: ./QueryLogsAMQP
+        run: dotnet build --no-restore -c Release /p:Platform="Any CPU"
+      
+      - name: Make ZIP archive
+        working-directory: "./QueryLogsAMQP/bin/Any CPU/Release"
+        if: ${{ github.ref == 'refs/heads/dev-master' }}
+        run: |
+          zip -r QueryLogsAMQP.zip ./
+      
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        if: ${{ github.ref == 'refs/heads/dev-master' }}
+        with:
+          name: QueryLogsAMQP-Nightly.zip
+          path: "./QueryLogsAMQP/bin/Any CPU/Release/QueryLogsAMQP.zip"
+          if-no-files-found: error
+          retention-days: 90
