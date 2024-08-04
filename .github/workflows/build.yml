@@ -37,7 +37,6 @@ jobs:
 
       - name: Add Licenses
         working-directory: "./QueryLogsAMQP/bin/Any CPU/Release"
-        #if: ${{ github.ref == 'refs/heads/master' }}
         run: |
           wget -O RabbitMQ.Client.LICENSE "https://raw.githubusercontent.com/rabbitmq/rabbitmq-dotnet-client/main/LICENSE-APACHE2"
           wget -O Newtonsoft.Json.LICENSE "https://raw.githubusercontent.com/JamesNK/Newtonsoft.Json/master/LICENSE.md"
@@ -45,13 +44,12 @@ jobs:
       
       - name: Make ZIP archive
         working-directory: "./QueryLogsAMQP/bin/Any CPU/Release"
-        #if: ${{ github.ref == 'refs/heads/master' }}
         run: |
           zip -r QueryLogsAMQP.zip ./
       
       - name: Upload build artifacts
         uses: actions/upload-artifact@v3
-        if: ${{ github.ref == 'refs/heads/master' }}
+        #if: ${{ github.ref == 'refs/heads/master' }}
         with:
           name: QueryLogsAMQP-Nightly.zip
           path: "./QueryLogsAMQP/bin/Any CPU/Release/QueryLogsAMQP.zip"
