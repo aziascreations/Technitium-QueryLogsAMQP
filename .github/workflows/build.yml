@@ -42,16 +42,12 @@ jobs:
           wget -O Newtonsoft.Json.LICENSE "https://raw.githubusercontent.com/JamesNK/Newtonsoft.Json/master/LICENSE.md"
           cp ../../../../LICENSE ./LICENSE
       
-      - name: Make ZIP archive
-        working-directory: "./QueryLogsAMQP/bin/Any CPU/Release"
-        run: |
-          zip -r QueryLogsAMQP.zip ./
-      
       - name: Upload build artifacts
         uses: actions/upload-artifact@v3
         #if: ${{ github.ref == 'refs/heads/master' }}
         with:
-          name: QueryLogsAMQP-Nightly.zip
-          path: "./QueryLogsAMQP/bin/Any CPU/Release/QueryLogsAMQP.zip"
+          name: QueryLogsAMQP-Nightly
+          path: "./QueryLogsAMQP/bin/Any CPU/Release/*"
           if-no-files-found: error
           retention-days: 90
+          compression-level: 9
