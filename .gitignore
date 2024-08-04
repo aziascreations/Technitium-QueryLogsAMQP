@@ -1,0 +1,9 @@
+﻿# IDEs
+.vs/
+.idea/
+
+# Build Artifacts
+bin/
+obj/
+*.exe
+*.dll
