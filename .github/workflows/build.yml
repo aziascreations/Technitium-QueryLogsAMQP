@@ -22,12 +22,13 @@ jobs:
         with:
           dotnet-version: 8.x
       
-      - name: Building Technitium libraries
-        run: |
-          cd TechnitiumLibrary
-          dotnet build ./TechnitiumLibrary.Net -c Release /p:Platform="Any CPU"
-          cd ../DnsServer
-          dotnet build ./DnsServerCore.ApplicationCommon /p:Platform="Any CPU"
+      - name: Build TechnitiumLibrary.Net
+        working-directory: ./TechnitiumLibrary
+        run: dotnet build ./TechnitiumLibrary.Net -c Release
+      
+      - name: Build DnsServerCore.ApplicationCommon
+        working-directory: ./DnsServer
+        run: dotnet build ./DnsServerCore.ApplicationCommon
       
       - name: Restore dependencies
         working-directory: ./QueryLogsAMQP
