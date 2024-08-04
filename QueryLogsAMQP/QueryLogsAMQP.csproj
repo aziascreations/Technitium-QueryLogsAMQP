@@ -18,14 +18,8 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <!--<PackageReference Include="AMQPNetLite" Version="2.4.11">
-          <IncludeAssets>compile</IncludeAssets>
-          <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
-          <CopyToPublishDirectory>Always</CopyToPublishDirectory>
-          <CopyToPublishDirectory>Always</CopyToPublishDirectory>
-          <PackageCopyToOutput>true</PackageCopyToOutput>>
-      </PackageReference>-->
-        <PackageReference Include="AMQPNetLite" Version="2.4.11" IncludeAssets="all"/>
+        <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+        <PackageReference Include="RabbitMQ.Client" Version="6.8.1" />
     </ItemGroup>
 
     <ItemGroup>
@@ -48,6 +42,6 @@
     </ItemGroup>
     
     <ItemDefinitionGroup>
-        <PackageReference ExcludeAssets="runtime" />
+        <PackageReference ExcludeAssets="none" />
     </ItemDefinitionGroup>
 </Project>

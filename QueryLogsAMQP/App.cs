@@ -1,64 +1,177 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Amqp;
+using RabbitMQ.Client;
 using DnsServerCore.ApplicationCommon;
+using Newtonsoft.Json;
 using TechnitiumLibrary.Net.Dns;
 using TechnitiumLibrary.Net.Dns.ResourceRecords;
+using JsonSerializer = System.Text.Json.JsonSerializer;
 
 namespace QueryLogsAMQP;
 
 // ReSharper disable SuggestVarOrType_SimpleTypes
+// ReSharper disable SuggestVarOrType_Elsewhere
 // ReSharper disable once UnusedType.Global
 // ReSharper disable ArrangeObjectCreationWhenTypeEvident
 public sealed class App : IDnsApplication, IDnsQueryLogger {
     /* Instance variables */
     private IDnsServer _dnsServer;
     private AppConfig _appConfig;
-    
-    private Connection _amqpConnection;
-    
-    
+
+    private readonly Timer _queueProcessingTimer;
+
+    private readonly ConcurrentQueue<RawQueryLogEntry> _queuedQueryLogEntries = new ConcurrentQueue<RawQueryLogEntry>();
     
     public App() {
-        
-    }
+        Console.WriteLine("QueryLogsAMQP: Instantiated App");
+        _queueProcessingTimer = new Timer(async delegate(object state) {
+            Console.WriteLine("QueryLogsAMQP: Pushing logs #");
+            _dnsServer?.WriteLog("Pushing logs");
 
-    private async Task ForceCloseConnection() {
-        try {
-            if(_amqpConnection != null) {
-                await _amqpConnection.CloseAsync(new TimeSpan(0, 0, 0, 0, 1));
+            try {
+                await PushLogBatch();
+            } catch(Exception e) {
+                if(_dnsServer != null) {
+                    _dnsServer.WriteLog("Failed to push log batch !");
+                    _dnsServer.WriteLog(e);
+                } else {
+                    Console.Error.WriteLine("Failed to push log batch !");
+                    Console.Error.WriteLine(e);
+                }
+            } finally {
+                try {
+                    _queueProcessingTimer!.Change(5000, Timeout.Infinite);
+                } catch(ObjectDisposedException) { }
             }
-        } catch(Exception) {
-            // We can just ignore those since we want to reconnect.
-        } finally {
-            _amqpConnection = null;
-        }
+        });
     }
-    
-    private async Task OpenConnection() {
-        await ForceCloseConnection();
 
-        try {
-            _amqpConnection = await Connection.Factory.CreateAsync(
-                new Address(
-                    host: _appConfig.AmqpHost,
-                    port: _appConfig.AmqpPort,
-                    user: _appConfig.AmqpAuthUsername,
-                    password: _appConfig.AmqpAuthPassword,
-                    path: _appConfig.AmqpVirtualHost,
-                    scheme: "ampq"
-                )
-            );
-        } catch(Exception e) {
-            Console.Error.Write(e);
+    private async Task PushLogBatch() {
+        Queue<RawQueryLogEntry> logEntries = new Queue<RawQueryLogEntry>();
+
+        while(true) {
+            // Fetching available log entries
+            while(logEntries.Count < _appConfig.SenderBatchMaxSize &&
+                  _queuedQueryLogEntries.TryDequeue(out RawQueryLogEntry log)) {
+                logEntries.Enqueue(log);
+            }
+            if(logEntries.Count < 1) {
+                break;
+            }
+            
+            // Attempting to push batch, and re-enqueuing remaining on
+            //  failure without incrementing failure count.
+
+            IConnection ampqConnection = null;
+            try {
+                //Uri amqpUri = _appConfig.GetConnectionString();
+                //Console.WriteLine(amqpUri.ToString());
+                ampqConnection = new ConnectionFactory {
+                    HostName = _appConfig.AmqpHost,
+                    Port = _appConfig.AmqpPort,
+                    UserName = _appConfig.AmqpAuthUsername,
+                    Password = _appConfig.AmqpAuthPassword,
+                    VirtualHost = _appConfig.AmqpVirtualHost,
+                    //Uri = amqpUri
+                }.CreateConnection();
+                
+                //Scheme = "amqp",
+                
+                IModel amqpChannel = ampqConnection.CreateModel();
+                
+                IBasicProperties props = amqpChannel.CreateBasicProperties();
+                props.ContentType = "application/json";
+                props.DeliveryMode = 2;
+                //props.Headers = new Dictionary<string, object>();
+                //props.Headers.Add("latitude",  51.5252949);
+                //props.Headers.Add("longitude", -0.0905493);
+
+                while(logEntries.TryDequeue(out RawQueryLogEntry logEntry)) {
+                    // Attempting to push the message, or re-enqueuing it on failure.
+                    try {
+                        ProcessedQueryLogEntry messageData = new ProcessedQueryLogEntry();
+                        
+                        messageData.timestamp = new DateTimeOffset(logEntry.Timestamp.ToUniversalTime())
+                                .ToUnixTimeMilliseconds().ToString();
+                        
+                        messageData.clientIp = logEntry.RemoteEp.Address.ToString();
+
+                        messageData.protocol = logEntry.Protocol.ToString();
+                        
+                        messageData.responseType = logEntry.Response.Tag == null
+                            ? (int)DnsServerResponseType.Recursive
+                            : (int)(DnsServerResponseType)logEntry.Response.Tag;
+                        
+                        messageData.rCode = (int)logEntry.Response.RCODE;
+                        
+                        if(logEntry.Request.Question.Count > 0) {
+                            DnsQuestionRecord query = logEntry.Request.Question[0];
+                            messageData.qName = query.Name.ToLower();
+                            messageData.qType = (int)query.Type;
+                            messageData.qClass = (int)query.Class;
+                        } else {
+                            messageData.qName = null;
+                            messageData.qType = -1;
+                            messageData.qClass = -1;
+                        }
+                        
+                        // ReSharper disable once ConvertIfStatementToSwitchStatement
+                        if(logEntry.Response.Answer.Count == 0) {
+                            messageData.answer = null;
+                        } else if(logEntry.Response.Answer.Count > 2 && logEntry.Response.IsZoneTransfer) {
+                            messageData.answer = "[ZONE TRANSFER]";
+                        } else {
+                            string answer = null;
+                            foreach(DnsResourceRecord dnsResourceRecord in logEntry.Response.Answer) {
+                                if(answer is null) {
+                                    answer = dnsResourceRecord.RDATA.ToString();
+                                } else {
+                                    answer += ", " + dnsResourceRecord.RDATA;
+                                }
+                            }
+                            messageData.answer = answer;
+                        }
+                        
+                        //string jsonString = JsonConvert.SerializeObject(messageData);
+                        //Console.WriteLine(jsonString);
+                        byte[] messageBodyBytes = System.Text.Encoding.UTF8.GetBytes(
+                            JsonConvert.SerializeObject(messageData));
+                        
+                        amqpChannel.BasicPublish(_appConfig.AmqpExchangeName, _appConfig.AmqpRoutingKey,
+                            props, messageBodyBytes);
+                    } catch(Exception e) {
+                        _dnsServer.WriteLog(e);
+                        logEntry.PushAttemptCount++;
+                        _queuedQueryLogEntries.Enqueue(logEntry);
+                    }
+                }
+            } catch(Exception e) {
+                _dnsServer.WriteLog("AMQP connection appears to have failed !");
+                _dnsServer.WriteLog(e);
+            } finally {
+                while(logEntries.TryDequeue(out RawQueryLogEntry logEntry)) {
+                    _queuedQueryLogEntries.Enqueue(logEntry);
+                }
+                ampqConnection?.Close();
+            }
+            
+            // If we enabled inter-batch delays, we don't loop indefinitely.
+            if(_appConfig.SenderInterBatchDelayMs > 0) {
+                break;
+            }
         }
+
     }
     
     public async Task InitializeAsync(IDnsServer dnsServer, string config) {
+        Console.WriteLine("QueryLogsAMQP: InitializeAsync START");
+        
         _dnsServer = dnsServer;
         
         JsonDocument jsonDocument = JsonDocument.Parse(config);
@@ -70,10 +183,14 @@ public sealed class App : IDnsApplication, IDnsQueryLogger {
         _appConfig.AmqpPort = jsonRootConfig.GetProperty("amqpPort").GetInt16();
         _appConfig.AmqpVirtualHost = jsonRootConfig.GetProperty("amqpVirtualHost").GetString();
         _appConfig.AmqpRoutingKey = jsonRootConfig.GetProperty("amqpRoutingKey").GetString();
+        _appConfig.AmqpExchangeName = jsonRootConfig.GetProperty("amqpExchangeName").GetString();
+        
         _appConfig.AmqpAuthUsername = jsonRootConfig.GetProperty("amqpAuthUsername").GetString();
         _appConfig.AmqpAuthPassword = jsonRootConfig.GetProperty("amqpAuthPassword").GetString();
         _appConfig.AmqpHeartbeat = jsonRootConfig.GetProperty("amqpHeartbeat").GetInt32();
         _appConfig.AmqpReconnectInDispose = jsonRootConfig.GetProperty("amqpReconnectInDispose").GetBoolean();
+        //_appConfig.AmqpLinkName = jsonRootConfig.GetProperty("amqpLinkName").GetString();
+        //_appConfig.AmqpLinkAddress = jsonRootConfig.GetProperty("amqpLinkAddress").GetString();
         
         _appConfig.AmpqsEnabled = jsonRootConfig.GetProperty("ampqsEnabled").GetBoolean();
         _appConfig.AmpqsRequired = jsonRootConfig.GetProperty("ampqsRequired").GetBoolean();
@@ -86,24 +203,46 @@ public sealed class App : IDnsApplication, IDnsQueryLogger {
         _appConfig.SenderColdDelayMs = jsonRootConfig.GetProperty("senderColdDelayMs").GetInt32();
         _appConfig.SenderInterBatchDelayMs = jsonRootConfig.GetProperty("senderInterBatchDelayMs").GetInt32();
         _appConfig.SenderBatchMaxSize = jsonRootConfig.GetProperty("senderBatchMaxSize").GetInt32();
+        _appConfig.SenderPostFailureDelayMs = jsonRootConfig.GetProperty("senderPostFailureDelayMs").GetInt32();
         
-        await OpenConnection();
+        //await OpenConnection();
+        
+        if (_appConfig.Enabled)
+            _queueProcessingTimer.Change(5000, Timeout.Infinite);
+        else
+            _queueProcessingTimer.Change(Timeout.Infinite, Timeout.Infinite);
+        
+        Console.WriteLine("QueryLogsAMQP: InitializeAsync END");
     }
     
     public void Dispose() {
+        Console.WriteLine("QueryLogsAMQP: Dispose");
         // Refusing any new entries in the queue.
         _appConfig.Enabled = false;
-        
-        
+
+        _queueProcessingTimer?.Dispose();
+
         // Flushing queues
         
         // Killing the connection
-        _ = ForceCloseConnection();
+        //_ = ForceCloseConnection();
     }
 
-    public Task InsertLogAsync(DateTime timestamp, DnsDatagram request, IPEndPoint remoteEP, DnsTransportProtocol protocol,
-        DnsDatagram response) {
-        throw new NotImplementedException();
+    public Task InsertLogAsync(DateTime timestamp, DnsDatagram request, IPEndPoint remoteEp,
+        DnsTransportProtocol protocol, DnsDatagram response) {
+
+        if(_appConfig.Enabled) {
+            _queuedQueryLogEntries.Enqueue(new RawQueryLogEntry() {
+                PushAttemptCount = 0,
+                Timestamp = timestamp,
+                Request = request,
+                RemoteEp = remoteEp,
+                Protocol = protocol,
+                Response = response
+            });
+        }
+        
+        return Task.CompletedTask;
     }
 
     public Task<DnsLogPage> QueryLogsAsync(long pageNumber, int entriesPerPage, bool descendingOrder, DateTime? start, DateTime? end,
@@ -121,10 +260,13 @@ public sealed class App : IDnsApplication, IDnsQueryLogger {
         public short AmqpPort;
         public string AmqpVirtualHost;
         public string AmqpRoutingKey;
+        public string AmqpExchangeName;
         public string AmqpAuthUsername;
         public string AmqpAuthPassword;
         public int AmqpHeartbeat;
         public bool AmqpReconnectInDispose;
+        //public string AmqpLinkName;
+        //public string AmqpLinkAddress;
         
         public bool AmpqsEnabled;
         public bool AmpqsRequired;
@@ -136,8 +278,47 @@ public sealed class App : IDnsApplication, IDnsQueryLogger {
         public int SenderColdDelayMs;
         public int SenderInterBatchDelayMs;
         public int SenderBatchMaxSize;
+        public int SenderPostFailureDelayMs;
+        
+        /*private Uri _cachedUri;
+        public Uri GetConnectionString() {
+            if(_cachedUri == null) {
+                _cachedUri = new UriBuilder {
+                    Host = AmqpHost,
+                    Port = AmqpPort,
+                    UserName = AmqpAuthUsername,
+                    Password = AmqpAuthPassword,
+                    Scheme = "amqp",
+                    Path = AmqpVirtualHost
+                }.Uri;
+            }
+            return _cachedUri;
+        }*/
     }
 
+    private struct RawQueryLogEntry {
+        public int PushAttemptCount;
+        public DateTime Timestamp;
+        public DnsDatagram Request;
+        public IPEndPoint RemoteEp;
+        public DnsTransportProtocol Protocol;
+        public DnsDatagram Response;
+    }
+    
+    // ReSharper disable InconsistentNaming
+    // ReSharper disable NotAccessedField.Local
+    private struct ProcessedQueryLogEntry {
+        public string timestamp;
+        public string clientIp;
+        public string protocol;
+        public int responseType;
+        public int rCode;
+        public string qName;
+        public int qType;
+        public int qClass;
+        public string answer;
+    }
+    
     #endregion
     
     #region App properties
