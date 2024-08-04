@@ -6,12 +6,12 @@ cd /d "%~dp0"
 
 pushd %CD%
 cd .\TechnitiumLibrary
-dotnet build ./TechnitiumLibrary.Net -c Release /p:Platform="Any CPU"
+dotnet build ./TechnitiumLibrary.Net -c Release
 popd
 
 pushd %CD%
 cd .\DnsServer
-dotnet build ./DnsServerCore.ApplicationCommon /p:Platform="Any CPU"
+dotnet build ./DnsServerCore.ApplicationCommon
 popd
 
 pushd %CD%
