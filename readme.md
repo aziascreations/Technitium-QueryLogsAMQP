@@ -66,6 +66,7 @@ This application can be made to suit a variety of situations and log throughput 
     "queueMaxSize": 10000,
     "queueMaxFailures": 5,
     "queueFailuresBypassSizeLimits": true,
+    "queueFailuresEjectOldestOnRequeue": true,
     
     "senderColdDelayMs": 5000,
     "senderInterBatchDelayMs": 500,
@@ -100,11 +101,12 @@ This application can be made to suit a variety of situations and log throughput 
 
 
 ### Internal Log Queue
-| Field                           | Description                     |
-|---------------------------------|---------------------------------|
-| `queueMaxSize`                  | ~~Not Implemented Yet~~         |
-| `queueMaxFailures`              | ~~Not Implemented Yet~~         |
-| `queueFailuresBypassSizeLimits` | ~~Not Implemented Yet~~         |
+| Field                               | Description                                                                                     |
+|-------------------------------------|-------------------------------------------------------------------------------------------------|
+| `queueMaxSize`                      | Drops oldest log entries after reaching the given number.<br>Use `-1` to disable.               |
+| `queueMaxFailures`                  | Drops log entries that failed as many times as given in this parameter.<br>Use `-1` to disable. |
+| `queueFailuresBypassSizeLimits`     | Allow log entries that couldn't be sent to be re-queued and bypass the limit in `queueMaxSize`. |
+| `queueFailuresEjectOldestOnRequeue` | Allow re-queued logs to eject and drop the oldest log when the queue is full.                   |
 
 
 ### AMQP Client Task
