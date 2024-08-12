@@ -21,15 +21,15 @@ public class TestInfiniteRequeuing {
         
         // Filling 9 of the 10 available slots
         for(int i = 0; i < _dnsApp.DnsAppConfig.QueueMaxSize - 1; i++) {
-            _dnsApp.RequeueLogEntry(new App.RawQueryLogEntry());
+            _dnsApp.RequeueFailedLogEntry(new App.RawQueryLogEntry());
         }
         
         // Attempting to fill the 10th slot
-        Assert.That(_dnsApp.RequeueLogEntry(new App.RawQueryLogEntry()), Is.True);
+        Assert.That(_dnsApp.RequeueFailedLogEntry(new App.RawQueryLogEntry()), Is.True);
         
         // Attempting to fill the 11th slot
         // Shouldn't fail since the queue has no limit.
-        Assert.That(_dnsApp.RequeueLogEntry(new App.RawQueryLogEntry()), Is.True);
+        Assert.That(_dnsApp.RequeueFailedLogEntry(new App.RawQueryLogEntry()), Is.True);
     }
 
     [Test]
@@ -40,12 +40,12 @@ public class TestInfiniteRequeuing {
         
         // Filling 9 of the 10 available slots
         for(int i = 0; i < 9; i++) {
-            _dnsApp.RequeueLogEntry(new App.RawQueryLogEntry());
+            _dnsApp.RequeueFailedLogEntry(new App.RawQueryLogEntry());
         }
         
         // Attempting to fill the 10th and 11th slots
-        Assert.That(_dnsApp.RequeueLogEntry(new App.RawQueryLogEntry()), Is.True);
-        Assert.That(_dnsApp.RequeueLogEntry(new App.RawQueryLogEntry()), Is.True);
+        Assert.That(_dnsApp.RequeueFailedLogEntry(new App.RawQueryLogEntry()), Is.True);
+        Assert.That(_dnsApp.RequeueFailedLogEntry(new App.RawQueryLogEntry()), Is.True);
         
         // We shouldn't have lost any either
         Assert.That(_dnsApp.QueuedQueryLogEntries, Has.Count.EqualTo(11));
@@ -60,9 +60,9 @@ public class TestInfiniteRequeuing {
         // We shouldn't be dropping any log either
         int desiredLogCount = _dnsApp.DnsAppConfig.QueueMaxSize + 25;
         for(int i = 0; i < desiredLogCount; i++) {
-            Assert.That(_dnsApp.RequeueLogEntry(new App.RawQueryLogEntry()), Is.True);
+            Assert.That(_dnsApp.RequeueFailedLogEntry(new App.RawQueryLogEntry()), Is.True);
         }
-        Assert.That(_dnsApp.QueuedQueryLogEntries.Count, Is.EqualTo(desiredLogCount));
+        Assert.That(_dnsApp.QueuedQueryLogEntries, Has.Count.EqualTo(desiredLogCount));
     }
 
     [Test]
@@ -74,9 +74,9 @@ public class TestInfiniteRequeuing {
         // We shouldn't be dropping any log either
         int desiredLogCount = _dnsApp.DnsAppConfig.QueueMaxSize + 25;
         for(int i = 0; i < desiredLogCount; i++) {
-            Assert.That(_dnsApp.RequeueLogEntry(new App.RawQueryLogEntry()), Is.True);
+            Assert.That(_dnsApp.RequeueFailedLogEntry(new App.RawQueryLogEntry()), Is.True);
         }
-        Assert.That(_dnsApp.QueuedQueryLogEntries.Count, Is.EqualTo(desiredLogCount));
+        Assert.That(_dnsApp.QueuedQueryLogEntries, Has.Count.EqualTo(desiredLogCount));
     }
 
     [TearDown]

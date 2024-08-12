@@ -107,6 +107,7 @@ This application can be made to suit a variety of situations and log throughput 
 | `queueMaxFailures`                  | Drops log entries that failed as many times as given in this parameter.<br>Use `-1` to disable. |
 | `queueFailuresBypassSizeLimits`     | Allow log entries that couldn't be sent to be re-queued and bypass the limit in `queueMaxSize`. |
 | `queueFailuresEjectOldestOnRequeue` | Allow re-queued logs to eject and drop the oldest log when the queue is full.                   |
+| `queueNewEjectOldestOnQueueing`     | New log entries eject and drop the oldest ones when the queue is full.                          |
 
 
 ### AMQP Client Task

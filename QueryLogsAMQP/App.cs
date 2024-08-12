@@ -48,11 +48,11 @@ public sealed class App : IDnsApplication, IDnsQueryLogger {
     }
 
     /// <summary>
-    ///     Attempts to requeue a given log entry if the app's parameters allow it.
+    ///     Attempts to requeue a given log entry whose failure count was incremented if the app's parameters allow it.
     /// </summary>
     /// <param name="logEntry">The log entry to be re-queued.</param>
     /// <returns><c>true</c> if it was re-queued, <c>false</c> otherwise.</returns>
-    public bool RequeueLogEntry(RawQueryLogEntry logEntry) {
+    public bool RequeueFailedLogEntry(RawQueryLogEntry logEntry) {
         if(DnsAppConfig.QueueMaxFailures != -1 && logEntry.PushAttemptCount > DnsAppConfig.QueueMaxFailures) {
             return false;
         }
@@ -77,7 +77,7 @@ public sealed class App : IDnsApplication, IDnsQueryLogger {
             // Fetching available log entries
             while(logEntries.Count < DnsAppConfig.SenderBatchMaxSize &&
                   QueuedQueryLogEntries.TryDequeue(out RawQueryLogEntry log)) {
-                // Skipping log entries that failed too many times.
+                // Skipping log entries that failed too many times and passed other exclusionary filters.
                 if(DnsAppConfig.QueueMaxFailures != -1 && log.PushAttemptCount > DnsAppConfig.QueueMaxFailures) {
                     continue;
                 }
@@ -119,6 +119,7 @@ public sealed class App : IDnsApplication, IDnsQueryLogger {
                 while(logEntries.TryDequeue(out RawQueryLogEntry logEntry)) {
                     // Attempting to push the message, or re-enqueuing it on failure.
                     try {
+                        // ReSharper disable once UseObjectOrCollectionInitializer
                         ProcessedQueryLogEntry messageData = new ProcessedQueryLogEntry();
 
                         messageData.timestamp = new DateTimeOffset(logEntry.Timestamp.ToUniversalTime())
@@ -172,14 +173,15 @@ public sealed class App : IDnsApplication, IDnsQueryLogger {
                         _dnsServer.WriteLog(e);
                         logEntry.PushAttemptCount++;
                         
-                        // Checking if we can re-queue it.
-                        RequeueLogEntry(logEntry);
+                        // Re-enqueuing it if possible.
+                        RequeueFailedLogEntry(logEntry);
                     }
                 }
             } catch(Exception e) {
                 _dnsServer.WriteLog("AMQP connection appears to have failed !");
                 _dnsServer.WriteLog(e);
             } finally {
+                // We don't penalize log entries if the connection died.
                 while(logEntries.TryDequeue(out RawQueryLogEntry logEntry)) {
                     QueuedQueryLogEntries.Enqueue(logEntry);
                 }
@@ -224,6 +226,8 @@ public sealed class App : IDnsApplication, IDnsQueryLogger {
             jsonRootConfig.GetProperty("queueFailuresBypassSizeLimits").GetBoolean();
         DnsAppConfig.QueueFailuresEjectOldestOnRequeue =
             jsonRootConfig.GetProperty("queueFailuresEjectOldestOnRequeue").GetBoolean();
+        DnsAppConfig.QueueNewEjectOldestOnQueueing =
+            jsonRootConfig.GetProperty("queueNewEjectOldestOnQueueing").GetBoolean();
 
         DnsAppConfig.SenderColdDelayMs = jsonRootConfig.GetProperty("senderColdDelayMs").GetInt32();
         DnsAppConfig.SenderInterBatchDelayMs = jsonRootConfig.GetProperty("senderInterBatchDelayMs").GetInt32();
@@ -256,6 +260,14 @@ public sealed class App : IDnsApplication, IDnsQueryLogger {
     public Task InsertLogAsync(DateTime timestamp, DnsDatagram request, IPEndPoint remoteEp,
         DnsTransportProtocol protocol, DnsDatagram response) {
         if(DnsAppConfig.Enabled) {
+            if(DnsAppConfig.QueueMaxSize != -1 && QueuedQueryLogEntries.Count >= DnsAppConfig.QueueMaxSize) {
+                if(!DnsAppConfig.QueueNewEjectOldestOnQueueing) {
+                    return Task.CompletedTask;
+                }
+
+                QueuedQueryLogEntries.TryDequeue(out _);
+            }
+            
             QueuedQueryLogEntries.Enqueue(new RawQueryLogEntry() {
                 PushAttemptCount = 0,
                 Timestamp = timestamp,
@@ -298,6 +310,7 @@ public sealed class App : IDnsApplication, IDnsQueryLogger {
         public int QueueMaxFailures;
         public bool QueueFailuresBypassSizeLimits;
         public bool QueueFailuresEjectOldestOnRequeue;
+        public bool QueueNewEjectOldestOnQueueing;
 
         public int SenderColdDelayMs;
         public int SenderInterBatchDelayMs;
